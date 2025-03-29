@@ -9,12 +9,11 @@ import json
 import sys
 import shutil
 from piazza_api import Piazza
+from tqdm import tqdm
 
 PIAZZA_USERNAME = ''
 PIAZZA_PASSWORD = ''
-REQ_DELAY = 0.3 #how much time to wait between each request to Piazza (avoids "too fast" error)
-
-count = 0 #for printing later on
+REQ_DELAY = 0.4 #how much time to wait between each request to Piazza (avoids "too fast" error)
 
 def get_creds():
     #get credentials
@@ -34,47 +33,35 @@ def save_data(data, course_id):
         with open(f'output/{course_id}/{name}.json', 'w', encoding='utf-8') as f: #TODO: allow users to select output folder through args
             json.dump(data[name], f, ensure_ascii=False, indent=4)
 
-def scrape(posts, generator):
-    global count
+def scrape(posts, post):
+    try:
+        p_data = {} #post data
 
-    for post in generator:
-        print(f'Scraping post {count}...', end='\r')
-        sys.stdout.flush()
-        count += 1
+        #put main post content
+        p_data['subject'] = post['history'][0]['subject']
+        p_data['content'] = post['history'][0]['content']
 
-        try:
-            p_data = {} #post data
-
-            #put main post content
-            p_data['subject'] = post['history'][0]['subject']
-            p_data['content'] = post['history'][0]['content']
-
-            #add replies and follow up discussion
-            replies = []
-            for child in post['children']:
-                if 'history' in child.keys():
-                    replies.append(child['history'][0]['content'])
-                else:
-                    replies.append(child['subject'])
-            p_data['replies'] = replies
+        #add replies and follow up discussion
+        replies = []
+        for child in post['children']:
+            if 'history' in child.keys():
+                replies.append(child['history'][0]['content'])
+            else:
+                replies.append(child['subject'])
+        p_data['replies'] = replies
+        
+        #sort data into dictionary using post's folder array
+        for folder in post['folders']:
+            if folder not in posts.keys():
+                posts[folder] = []
             
-            #sort data into dictionary using post's folder array
-            for folder in post['folders']:
-                if folder not in posts.keys():
-                    posts[folder] = []
-                
-                posts[folder].append(p_data)
+            posts[folder].append(p_data)
 
-            time.sleep(REQ_DELAY) #avoid spamming the Piazza server
-        except KeyboardInterrupt:
-            break #save data gathered so far in case program is running longer than user wants
-        except Exception as e:
-            print(e)
-            break
+        time.sleep(REQ_DELAY) #avoid spamming the Piazza server
+    except Exception as e:
+        print(e)
 
 def main(cid=''):
-    global count
-
     if cid == '':
         print('No course id specified. Exiting...')
         return
@@ -109,17 +96,22 @@ def main(cid=''):
     '''
 
     posts = {}
+    feed = course.get_feed(limit=999999, offset=0)
+    cids = [post['id'] for post in feed["feed"]]
 
-    generator = course.iter_all_posts()
-    count = 0 #global variable that will be updated in the scrape function
-    while True:
-        try:
-            scrape(posts=posts, generator=generator)
-            break
-        except:
-            time.sleep(REQ_DELAY*5) #wait extra long if Piazza starts yelling at us for spamming them
+    print("Scraping...")
+    for c in tqdm(cids):
+        while True:
+            try:
+                scrape(posts=posts, post=course.get_post(c))
+                break
+            except KeyboardInterrupt:
+                break
+            except:
+                time.sleep(REQ_DELAY*12)
+                course = p.network(cid) #refresh network
+                time.sleep(REQ_DELAY*12) # wait extra long before trying again
 
-    print()
     print("Done. Saving data...")
     save_data(posts, cid)
     print("Saved!")
