@@ -1,2 +1,2 @@
 getpass4==0.0.14.1
-selenium==3.141.0
+piazza-api==0.14.3
