@@ -33,13 +33,45 @@ def save_data(data, course_id):
         with open(f'output/{course_id}/{name}.json', 'w', encoding='utf-8') as f: #TODO: allow users to select output folder through args
             json.dump(data[name], f, ensure_ascii=False, indent=4)
 
+def convert_uid_to_name(course, data):
+    """
+    Converts the raw uids scraped from the Piazza posts to real names
+
+    This logic is put into a separate function to allow for an easy way to disable this feature should
+    we decide to make the collected data more anonymous (only display users' uids rather than their names).
+    """
+
+    #fetch names for uids
+    uids = []
+    for folder in data:
+        uids.extend([n['author'] for n in data[folder]])
+    uids = list(filter(lambda x: x!='anon', set(uids))) #remove duplicates and anon entries
+    names = course.get_users(uids) #Piazza api call
+
+    #build uid-name dict
+    name_dict = {}
+    for name, uid in zip(names, uids):
+        name_dict[uid] = name['name']
+
+    #loop through data and convert names
+    for folder in data:
+        for n in data[folder]:
+            n['author'] = name_dict.get(n['author'], 'anon')
+    
+
 def scrape(posts, post):
     try:
         p_data = {} #post data
 
+        #author scraping
+        uid = 'anon'
+        if post['history'][0]['anon'] == 'no':
+            uid = post['history'][0]['uid']
+
         #put main post content
         p_data['subject'] = post['history'][0]['subject']
         p_data['content'] = post['history'][0]['content']
+        p_data['author'] = uid
 
         #add replies and follow up discussion
         replies = []
@@ -111,6 +143,9 @@ def main(cid=''):
                 time.sleep(REQ_DELAY*12)
                 course = p.network(cid) #refresh network
                 time.sleep(REQ_DELAY*12) # wait extra long before trying again
+
+    #convert uids in collected data to real names
+    convert_uid_to_name(course, posts)
 
     print("Done. Saving data...")
     save_data(posts, cid)
