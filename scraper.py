@@ -1,5 +1,5 @@
-#Final code for the scraper after experimenting in jupyter notebook
-#Script usage --> python scraper.py course_id
+# Final code for the scraper after experimenting in jupyter notebook
+# Script usage --> python scraper.py course_id
 #               Example: python scraper.py m470f2rs65zff
 
 import os
@@ -44,7 +44,13 @@ def convert_uid_to_name(course, data):
     #fetch names for uids
     uids = []
     for folder in data:
-        uids.extend([n['author'] for n in data[folder]])
+        for n in data[folder]:
+            uids.append(n['author']) #add post author
+
+            #add comment authors
+            for r in n['replies']:
+                uids.append(r['author'])
+
     uids = list(filter(lambda x: x!='anon', set(uids))) #remove duplicates and anon entries
     names = course.get_users(uids) #Piazza api call
 
@@ -57,6 +63,8 @@ def convert_uid_to_name(course, data):
     for folder in data:
         for n in data[folder]:
             n['author'] = name_dict.get(n['author'], 'anon')
+            for r in n['replies']:
+                r['author'] = name_dict.get(r['author'], 'anon')
     
 
 def scrape(posts, post):
@@ -76,10 +84,14 @@ def scrape(posts, post):
         #add replies and follow up discussion
         replies = []
         for child in post['children']:
+            comment = {}
             if 'history' in child.keys():
-                replies.append(child['history'][0]['content'])
+                comment['content'] = child['history'][0]['content']
+                comment['author'] = child['history'][0]['uid'] if (child['history'][0]['anon'] == 'no') else 'anon'
             else:
-                replies.append(child['subject'])
+                comment['content'] = child['subject']
+                comment['author'] = child['uid'] if (child['anon'] == 'no') else 'anon'
+            replies.append(comment)
         p_data['replies'] = replies
         
         #sort data into dictionary using post's folder array
