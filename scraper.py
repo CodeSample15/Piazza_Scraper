@@ -9,6 +9,7 @@ import json
 import sys
 import shutil
 from piazza_api import Piazza
+from copy import deepcopy
 from tqdm import tqdm
 
 PIAZZA_USERNAME = ''
@@ -43,7 +44,7 @@ def convert_uid_to_name(course, data):
 
     #fetch names for uids
     uids = []
-    for folder in data:
+    for folder in deepcopy(data):
         for n in data[folder]:
             uids.append(n['author']) #add post author
 
@@ -52,7 +53,17 @@ def convert_uid_to_name(course, data):
                 uids.append(r['author'])
 
     uids = list(filter(lambda x: x!='anon', set(uids))) #remove duplicates and anon entries
-    names = course.get_users(uids) #Piazza api call
+    
+    #get names one by one to avoid shuffling issue with piazza library (names will sometimes randomly shuffle, messing up the dictionary)
+    names = []
+    for uid in tqdm(uids):
+        while True:
+            try:
+                names.append(course.get_users([uid,])[0])
+                time.sleep(REQ_DELAY)
+                break
+            except:
+                time.sleep(REQ_DELAY*10) #extra delay to avoid spamming the Piazza server
 
     #build uid-name dict
     name_dict = {}
@@ -157,6 +168,7 @@ def main(cid=''):
                 time.sleep(REQ_DELAY*12) # wait extra long before trying again
 
     #convert uids in collected data to real names
+    print('Gathering names...')
     convert_uid_to_name(course, posts)
 
     print("Done. Saving data...")
