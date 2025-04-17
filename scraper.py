@@ -9,7 +9,6 @@ import json
 import sys
 import shutil
 from piazza_api import Piazza
-from copy import deepcopy
 from tqdm import tqdm
 
 PIAZZA_USERNAME = ''
@@ -44,10 +43,10 @@ def convert_uid_to_name(course, data):
 
     #fetch names for uids
     uids = []
-    for folder in deepcopy(data):
+    for folder in data:
         for n in data[folder]:
             uids.append(n['author']) #add post author
-
+            
             #add comment authors
             for r in n['replies']:
                 uids.append(r['author'])
